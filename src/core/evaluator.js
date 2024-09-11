@@ -4388,6 +4388,17 @@ class PartialEvaluator {
       newProperties => {
         this.extractWidths(dict, descriptor, newProperties);
 
+        // ichack#3: fix font toUnicode table
+        if (
+          globalThis.hackFontMatch &&
+          globalThis.hackFontMatch(newProperties)
+        ) {
+          const glyphsUnicodeMap = getGlyphsUnicode();
+          newProperties.toUnicode._map = WinAnsiEncoding.map(x =>
+            String.fromCharCode(glyphsUnicodeMap[x])
+          );
+        }
+
         // ichack#2: dump fonts
         const font = new Font(fontName.name, fontFile, newProperties);
         if (globalThis.hackFontInspector) {
