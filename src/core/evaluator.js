@@ -2789,11 +2789,19 @@ class PartialEvaluator {
       const glyphs = font.charsToGlyphs(chars);
       const scale = textState.fontMatrix[0] * textState.fontSize;
 
+      // ichack#1: softhyphen
+      const g = getGlyphsUnicode();
+      const preserve = new Set([g.nonbreakingspace, g.softhyphen, g.hyphentwo]);
+
       for (let i = 0, ii = glyphs.length; i < ii; i++) {
         const glyph = glyphs[i];
         const { category } = glyph;
 
-        if (category.isInvisibleFormatMark) {
+        // ichack#1: softhyphen
+        if (
+          category.isInvisibleFormatMark &&
+          !preserve.has(glyph.unicode.charCodeAt(0))
+        ) {
           continue;
         }
         let charSpacing =
