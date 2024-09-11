@@ -4388,7 +4388,12 @@ class PartialEvaluator {
       newProperties => {
         this.extractWidths(dict, descriptor, newProperties);
 
-        return new Font(fontName.name, fontFile, newProperties);
+        // ichack#2: dump fonts
+        const font = new Font(fontName.name, fontFile, newProperties);
+        if (globalThis.hackFontInspector) {
+          globalThis.hackFontInspector(font);
+        }
+        return font;
       }
     );
   }
