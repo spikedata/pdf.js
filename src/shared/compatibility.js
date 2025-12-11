@@ -21,7 +21,8 @@ import { isNodeJS } from "./is_node.js";
   if (globalThis.DOMMatrix || !isNodeJS) {
     return;
   }
-  globalThis.DOMMatrix = __non_webpack_require__("canvas").DOMMatrix;
+  // ICHACK: remove canvas
+  // globalThis.DOMMatrix = __non_webpack_require__("canvas").DOMMatrix;
 })();
 
 // Support: Node.js
@@ -29,11 +30,12 @@ import { isNodeJS } from "./is_node.js";
   if (globalThis.Path2D || !isNodeJS) {
     return;
   }
-  const { CanvasRenderingContext2D } = __non_webpack_require__("canvas");
-  const { polyfillPath2D } = __non_webpack_require__("path2d-polyfill");
+  // ICHACK: remove canvas
+  // const { CanvasRenderingContext2D } = __non_webpack_require__("canvas");
+  // const { polyfillPath2D } = __non_webpack_require__("path2d-polyfill");
 
-  globalThis.CanvasRenderingContext2D = CanvasRenderingContext2D;
-  polyfillPath2D(globalThis);
+  // globalThis.CanvasRenderingContext2D = CanvasRenderingContext2D;
+  // polyfillPath2D(globalThis);
 })();
 
 // Support: Chrome<98
