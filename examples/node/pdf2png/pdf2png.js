@@ -13,9 +13,24 @@
  * limitations under the License.
  */
 
-const Canvas = require("canvas");
 const assert = require("assert").strict;
 const fs = require("fs");
+
+let Canvas;
+try {
+  Canvas = require("canvas");
+} catch (reason) {
+  if (
+    reason?.code === "MODULE_NOT_FOUND" &&
+    /['"]canvas['"]/.test(reason.message)
+  ) {
+    throw new Error(
+      'This example requires the optional dependency "canvas". ' +
+        "Install it before converting PDFs to PNG images in Node."
+    );
+  }
+  throw reason;
+}
 
 function NodeCanvasFactory() {}
 NodeCanvasFactory.prototype = {

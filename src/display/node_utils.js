@@ -40,6 +40,29 @@ const fetchData = function (url) {
   });
 };
 
+let canvasModule;
+
+function getCanvasModule() {
+  if (canvasModule) {
+    return canvasModule;
+  }
+  try {
+    canvasModule = __non_webpack_require__("canvas");
+    return canvasModule;
+  } catch (reason) {
+    if (
+      reason?.code === "MODULE_NOT_FOUND" &&
+      /['"]canvas['"]/.test(reason.message)
+    ) {
+      throw new Error(
+        'The optional dependency "canvas" is required for Node.js rendering. ' +
+          "Install it before calling page.render() or using NodeCanvasFactory."
+      );
+    }
+    throw reason;
+  }
+}
+
 class NodeFilterFactory extends BaseFilterFactory {}
 
 class NodeCanvasFactory extends BaseCanvasFactory {
@@ -47,7 +70,7 @@ class NodeCanvasFactory extends BaseCanvasFactory {
    * @ignore
    */
   _createCanvas(width, height) {
-    const Canvas = __non_webpack_require__("canvas");
+    const Canvas = getCanvasModule();
     return Canvas.createCanvas(width, height);
   }
 }
