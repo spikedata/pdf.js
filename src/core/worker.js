@@ -728,7 +728,12 @@ class WorkerMessageHandler {
     });
 
     handler.on("GetTextContent", function (data, sink) {
-      const { pageIndex, includeMarkedContent, disableNormalization } = data;
+      const {
+        pageIndex,
+        includeMarkedContent,
+        includeNonVisibleText,
+        disableNormalization,
+      } = data;
 
       pdfManager.getPage(pageIndex).then(function (page) {
         const task = new WorkerTask("GetTextContent: page " + pageIndex);
@@ -743,6 +748,7 @@ class WorkerMessageHandler {
             task,
             sink,
             includeMarkedContent,
+            includeNonVisibleText,
             disableNormalization,
           })
           .then(

@@ -2249,6 +2249,7 @@ class PartialEvaluator {
     resources,
     stateManager = null,
     includeMarkedContent = false,
+    includeNonVisibleText = false,
     sink,
     seenStyles = new Set(),
     viewBox,
@@ -2378,6 +2379,10 @@ class PartialEvaluator {
     const preprocessor = new EvaluatorPreprocessor(stream, xref, stateManager);
 
     let textState;
+    let currentPathMinMax = null;
+    let currentPathPoint = null;
+    let currentPathStart = null;
+    let pendingClip = false;
 
     function pushWhitespace({
       width = 0,
@@ -2422,6 +2427,108 @@ class PartialEvaluator {
       return Util.transform(
         textState.ctm,
         Util.transform(textState.textMatrix, tsm)
+      );
+    }
+
+    function updateCurrentPathMinMax(x, y) {
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        return;
+      }
+      if (!currentPathMinMax) {
+        currentPathMinMax = [x, x, y, y];
+        return;
+      }
+      currentPathMinMax[0] = Math.min(currentPathMinMax[0], x);
+      currentPathMinMax[1] = Math.max(currentPathMinMax[1], x);
+      currentPathMinMax[2] = Math.min(currentPathMinMax[2], y);
+      currentPathMinMax[3] = Math.max(currentPathMinMax[3], y);
+    }
+
+    function moveCurrentPathPoint(x, y) {
+      updateCurrentPathMinMax(x, y);
+      currentPathPoint = [x, y];
+      currentPathStart = [x, y];
+    }
+
+    function clearCurrentPath() {
+      currentPathMinMax = null;
+      currentPathPoint = null;
+      currentPathStart = null;
+    }
+
+    function getTransformedPathBox(minMax, matrix = textState.ctm) {
+      if (!minMax || !matrix) {
+        return null;
+      }
+      const points = [
+        [minMax[0], minMax[2]],
+        [minMax[0], minMax[3]],
+        [minMax[1], minMax[2]],
+        [minMax[1], minMax[3]],
+      ];
+      let xMin = Infinity;
+      let yMin = Infinity;
+      let xMax = -Infinity;
+      let yMax = -Infinity;
+
+      for (const point of points) {
+        const [x, y] = Util.applyTransform(point, matrix);
+        xMin = Math.min(xMin, x);
+        yMin = Math.min(yMin, y);
+        xMax = Math.max(xMax, x);
+        yMax = Math.max(yMax, y);
+      }
+      return [xMin, yMin, xMax, yMax];
+    }
+
+    function intersectBoxes(box1, box2) {
+      if (!box1) {
+        return box2 ? box2.slice() : null;
+      }
+      if (!box2) {
+        return box1.slice();
+      }
+      return [
+        Math.max(box1[0], box2[0]),
+        Math.max(box1[1], box2[1]),
+        Math.min(box1[2], box2[2]),
+        Math.min(box1[3], box2[3]),
+      ];
+    }
+
+    function clipPendingPath() {
+      if (!pendingClip) {
+        return;
+      }
+      pendingClip = false;
+
+      const clipBox = getTransformedPathBox(currentPathMinMax);
+      if (!clipBox) {
+        return;
+      }
+      textState.clipBox = intersectBoxes(textState.clipBox, clipBox);
+    }
+
+    function glyphIntersectsBox(box, posX, posY, glyphWidth, isVertical) {
+      if (!box) {
+        return true;
+      }
+      if (box[0] > box[2] || box[1] > box[3]) {
+        return false;
+      }
+      if (isVertical) {
+        return !(
+          posX < box[0] ||
+          posX > box[2] ||
+          posY + glyphWidth < box[1] ||
+          posY > box[3]
+        );
+      }
+      return !(
+        posX + glyphWidth < box[0] ||
+        posX > box[2] ||
+        posY < box[1] ||
+        posY > box[3]
       );
     }
 
@@ -2557,25 +2664,39 @@ class PartialEvaluator {
     }
 
     function compareWithLastPosition(glyphWidth) {
+      if (
+        !includeNonVisibleText &&
+        (textState.textRenderingMode & TextRenderingMode.FILL_STROKE_MASK) ===
+          TextRenderingMode.INVISIBLE
+      ) {
+        return false;
+      }
+
       const currentTransform = getCurrentTextTransform();
       let posX = currentTransform[4];
       let posY = currentTransform[5];
 
       // Check if the glyph is in the viewbox.
-      if (textState.font?.vertical) {
-        if (
-          posX < viewBox[0] ||
-          posX > viewBox[2] ||
-          posY + glyphWidth < viewBox[1] ||
-          posY > viewBox[3]
-        ) {
-          return false;
-        }
-      } else if (
-        posX + glyphWidth < viewBox[0] ||
-        posX > viewBox[2] ||
-        posY < viewBox[1] ||
-        posY > viewBox[3]
+      if (
+        !glyphIntersectsBox(
+          viewBox,
+          posX,
+          posY,
+          glyphWidth,
+          textState.font?.vertical
+        )
+      ) {
+        return false;
+      }
+      if (
+        !includeNonVisibleText &&
+        !glyphIntersectsBox(
+          textState.clipBox,
+          posX,
+          posY,
+          glyphWidth,
+          textState.font?.vertical
+        )
       ) {
         return false;
       }
@@ -3009,6 +3130,71 @@ class PartialEvaluator {
         args = operation.args;
 
         switch (fn | 0) {
+          case OPS.moveTo:
+            moveCurrentPathPoint(args[0], args[1]);
+            break;
+          case OPS.lineTo:
+            if (currentPathPoint) {
+              updateCurrentPathMinMax(currentPathPoint[0], currentPathPoint[1]);
+            }
+            updateCurrentPathMinMax(args[0], args[1]);
+            currentPathPoint = [args[0], args[1]];
+            break;
+          case OPS.curveTo:
+            if (currentPathPoint) {
+              updateCurrentPathMinMax(currentPathPoint[0], currentPathPoint[1]);
+            }
+            updateCurrentPathMinMax(args[0], args[1]);
+            updateCurrentPathMinMax(args[2], args[3]);
+            updateCurrentPathMinMax(args[4], args[5]);
+            currentPathPoint = [args[4], args[5]];
+            break;
+          case OPS.curveTo2:
+            if (currentPathPoint) {
+              updateCurrentPathMinMax(currentPathPoint[0], currentPathPoint[1]);
+            }
+            updateCurrentPathMinMax(args[0], args[1]);
+            updateCurrentPathMinMax(args[2], args[3]);
+            currentPathPoint = [args[2], args[3]];
+            break;
+          case OPS.curveTo3:
+            if (currentPathPoint) {
+              updateCurrentPathMinMax(currentPathPoint[0], currentPathPoint[1]);
+            }
+            updateCurrentPathMinMax(args[0], args[1]);
+            updateCurrentPathMinMax(args[2], args[3]);
+            currentPathPoint = [args[2], args[3]];
+            break;
+          case OPS.closePath:
+            if (currentPathStart) {
+              currentPathPoint = currentPathStart.slice();
+            }
+            break;
+          case OPS.rectangle: {
+            const x = args[0];
+            const y = args[1];
+            updateCurrentPathMinMax(x, y);
+            updateCurrentPathMinMax(x + args[2], y + args[3]);
+            currentPathPoint = [x, y];
+            currentPathStart = [x, y];
+            break;
+          }
+          case OPS.clip:
+          case OPS.eoClip:
+            pendingClip = true;
+            break;
+          case OPS.stroke:
+          case OPS.closeStroke:
+          case OPS.fill:
+          case OPS.eoFill:
+          case OPS.fillStroke:
+          case OPS.eoFillStroke:
+          case OPS.closeFillStroke:
+          case OPS.closeEOFillStroke:
+          case OPS.endPath:
+            clipPendingPath();
+            clearCurrentPath();
+            break;
           case OPS.setFont:
             // Optimization to ignore multiple identical Tf commands.
             var fontNameArg = args[0].name,
@@ -3028,6 +3214,9 @@ class PartialEvaluator {
             return;
           case OPS.setTextRise:
             textState.textRise = args[0];
+            break;
+          case OPS.setTextRenderingMode:
+            textState.textRenderingMode = args[0];
             break;
           case OPS.setHScale:
             textState.textHScale = args[0] / 100;
@@ -3216,6 +3405,19 @@ class PartialEvaluator {
                 if (Array.isArray(matrix) && matrix.length === 6) {
                   xObjStateManager.transform(matrix);
                 }
+                if (!includeNonVisibleText) {
+                  let bbox = xobj.dict.getArray("BBox");
+                  if (Array.isArray(bbox) && bbox.length === 4) {
+                    bbox = Util.normalizeRect(bbox);
+                    xObjStateManager.state.clipBox = intersectBoxes(
+                      xObjStateManager.state.clipBox,
+                      getTransformedPathBox(
+                        [bbox[0], bbox[2], bbox[1], bbox[3]],
+                        xObjStateManager.state.ctm
+                      )
+                    );
+                  }
+                }
 
                 // Enqueue the `textContent` chunk before parsing the /Form
                 // XObject.
@@ -3244,6 +3446,7 @@ class PartialEvaluator {
                     resources: xobj.dict.get("Resources") || resources,
                     stateManager: xObjStateManager,
                     includeMarkedContent,
+                    includeNonVisibleText,
                     sink: sinkWrapper,
                     seenStyles,
                     viewBox,
@@ -4698,6 +4901,8 @@ class TextState {
     this.leading = 0;
     this.textHScale = 1;
     this.textRise = 0;
+    this.textRenderingMode = TextRenderingMode.FILL;
+    this.clipBox = null;
   }
 
   setTextMatrix(a, b, c, d, e, f) {
@@ -4742,6 +4947,7 @@ class TextState {
     clone.textMatrix = this.textMatrix.slice();
     clone.textLineMatrix = this.textLineMatrix.slice();
     clone.fontMatrix = this.fontMatrix.slice();
+    clone.clipBox = this.clipBox ? this.clipBox.slice() : null;
     return clone;
   }
 }

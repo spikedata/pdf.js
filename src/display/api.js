@@ -1125,6 +1125,8 @@ class PDFDocumentProxy {
  * @typedef {Object} getTextContentParameters
  * @property {boolean} [includeMarkedContent] - When true include marked
  *   content items in the items array of TextContent. The default is `false`.
+ * @property {boolean} [includeNonVisibleText] - When true keep text that is
+ *   clipped away or otherwise not visibly rendered. The default is `false`.
  * @property {boolean} [disableNormalization] - When true the text is *not*
  *   normalized in the worker-thread. The default is `false`.
  */
@@ -1605,6 +1607,7 @@ class PDFPageProxy {
    */
   streamTextContent({
     includeMarkedContent = false,
+    includeNonVisibleText = false,
     disableNormalization = false,
   } = {}) {
     const TEXT_CONTENT_CHUNK_SIZE = 100;
@@ -1614,6 +1617,7 @@ class PDFPageProxy {
       {
         pageIndex: this._pageIndex,
         includeMarkedContent: includeMarkedContent === true,
+        includeNonVisibleText: includeNonVisibleText === true,
         disableNormalization: disableNormalization === true,
       },
       {

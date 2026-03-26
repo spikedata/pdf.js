@@ -606,6 +606,7 @@ class Page {
     handler,
     task,
     includeMarkedContent,
+    includeNonVisibleText,
     disableNormalization,
     sink,
   }) {
@@ -637,6 +638,7 @@ class Page {
         task,
         resources: this.resources,
         includeMarkedContent,
+        includeNonVisibleText,
         disableNormalization,
         sink,
         viewBox: this.view,
