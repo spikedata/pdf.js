@@ -1477,6 +1477,10 @@ gulp.task("types", function (done) {
     "forceConsistentCasingInFileNames",
     "emitDeclarationOnly",
     "moduleResolution node",
+    // only use this repo's @types: when pdf.js is checked out inside another project (e.g. as a git
+    // submodule of spike2-core) tsc would otherwise also pick up the parent's node_modules/@types
+    // (@types/bun), which does not compile with this tsc version
+    "typeRoots ./node_modules/@types",
   ].join(" --");
   exec(
     `"node_modules/.bin/tsc" --${args} src/pdf.js web/pdf_viewer.component.js`,
