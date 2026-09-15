@@ -587,6 +587,22 @@ function stringToUTF16String(str, bigEndian = false) {
   return buf.join("");
 }
 
+// Checks that `arr` is either a plain Array of numbers, or a TypedArray, and
+// (when `len` is not null) that it has exactly `len` entries. Used to reject
+// crafted PDF arrays such as a FontMatrix that smuggles a string element
+// (CVE-2024-4367: such a string is otherwise concatenated straight into the
+// `new Function(...)` glyph-path compiler in display/font_loader.js).
+function isNumberArray(arr, len) {
+  if (Array.isArray(arr)) {
+    return (
+      (len === null || arr.length === len) &&
+      arr.every(x => typeof x === "number")
+    );
+  }
+  // This check allows us to have typed arrays but not the `undefined` value.
+  return ArrayBuffer.isView(arr) && (len === null || arr.length === len);
+}
+
 function getRotationMatrix(rotation, width, height) {
   switch (rotation) {
     case 90:
@@ -611,6 +627,7 @@ export {
   getNewAnnotationsMap,
   getRotationMatrix,
   isAscii,
+  isNumberArray,
   isWhiteSpace,
   log2,
   MissingDataException,

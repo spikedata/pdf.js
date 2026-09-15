@@ -21,6 +21,7 @@ import {
   warn,
 } from "../shared/util.js";
 import { CFFParser } from "./cff_parser.js";
+import { isNumberArray } from "./core_utils.js";
 import { getGlyphsUnicode } from "./glyphlist.js";
 import { StandardEncoding } from "./encodings.js";
 import { Stream } from "./stream.js";
@@ -789,7 +790,12 @@ class CompiledFont {
       const fdIndex = this.fdSelect.getFDIndex(glyphId);
       if (fdIndex >= 0 && fdIndex < this.fdArray.length) {
         const fontDict = this.fdArray[fdIndex];
-        fontMatrix = fontDict.getByName("FontMatrix") || FONT_IDENTITY_MATRIX;
+        const boundFontMatrix = fontDict.getByName("FontMatrix");
+        // Reject a non-numeric FontMatrix (CVE-2024-4367): its entries are
+        // spliced into the compiled glyph-path function below.
+        fontMatrix = isNumberArray(boundFontMatrix, 6)
+          ? boundFontMatrix
+          : FONT_IDENTITY_MATRIX;
       } else {
         warn("Invalid fd index for glyph index.");
       }

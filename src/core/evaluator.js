@@ -71,7 +71,7 @@ import { DecodeStream } from "./decode_stream.js";
 import { FontFlags } from "./fonts_utils.js";
 import { getFontSubstitution } from "./font_substitutions.js";
 import { getGlyphsUnicode } from "./glyphlist.js";
-import { getLookupTableFactory } from "./core_utils.js";
+import { getLookupTableFactory, isNumberArray } from "./core_utils.js";
 import { getMetrics } from "./metrics.js";
 import { getUnicodeForGlyph } from "./unicode.js";
 import { ImageResizer } from "./image_resizer.js";
@@ -4544,6 +4544,12 @@ class PartialEvaluator {
       }
     }
 
+    // A FontMatrix must be six numbers. Reject anything else (e.g. a crafted
+    // array whose entries include a string) to prevent CVE-2024-4367, where
+    // such a value is otherwise concatenated into the `new Function(...)`
+    // glyph-path compiler in display/font_loader.js.
+    const fontMatrix = dict.getArray("FontMatrix");
+
     properties = {
       type,
       name: fontName.name,
@@ -4556,7 +4562,9 @@ class PartialEvaluator {
       loadedName: baseDict.loadedName,
       composite,
       fixedPitch: false,
-      fontMatrix: dict.getArray("FontMatrix") || FONT_IDENTITY_MATRIX,
+      fontMatrix: isNumberArray(fontMatrix, 6)
+        ? fontMatrix
+        : FONT_IDENTITY_MATRIX,
       firstChar,
       lastChar,
       toUnicode,
